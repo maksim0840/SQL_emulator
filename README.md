@@ -10,15 +10,20 @@
 (8 byte) name_size, 
 (name_len byte) name,
 (4 byte) value_type, 
-(8 byte) value_default_size;
+(8 byte) value_max_size; // максимальный размер типа
+(8 byte) value_default_size; // размер deafault значения (0 => null)
 (value_default_len byte) char* value_default;
 (1 byte) unique attribute,
 (1 byte) autoincrement attribute,
 (1 byte) key attribute,
 
-
-
-
+labels_size+1..... строка (значения таблицы):
+-------------------------
+(8 byte) value_size + (4 byte) value, если тип INT32
+(8 byte) value_size + (1 byte) value, если тип BOOL
+(8 byte) value_size + (value_size byte) value + (max_value_size-value_size byte) padding, если тип STRING
+(8 byte) value_size + (value_size byte) value + (max_value_size-value_size byte) padding, если тип BYTES
+value_size == 0 <=> None
 
 
 значения для insert передаются через std::vector<std::variant<std::monostate, int, bool, std::string>> в порядке их появления, где std::monostate - нулевое значение.
@@ -27,7 +32,8 @@
 -------------------------
 если dafault значение отсутвует то value_default_size = 0;
 если пользователь пропустил значение то ставиться default, если default-а нет то ставиться null (value_size = 0), если есть одновременно и deafault и unique то при попытке второй раз втсавить default значение бросается исклбючение (если значение не null)
-
+-------------------------
+default и autoincrement - взаимоисключащие
 
 
 

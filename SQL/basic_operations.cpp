@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <stdexcept>
 #include <variant>
+#include <optional>
 
 // Конструктор
 Sql::Sql() {
@@ -15,52 +16,64 @@ Sql::Sql() {
 
     // Цикл по всем файлам дирректории "tables"
     for (const auto& entry : dir) {
-        update_table_label(entry.path().filename()); // получить информацию о столбцах таблицы
+        update_table_info(entry.path().filename()); // получить информацию о столбцах таблицы
     }
 }
 
 
-// Обновить информацию о столбцах в talbe_name таблице
-void Sql::update_table_label(const std::string& talbe_name) {
+// Обновить информацию о структуре таблицы (информация о столбцах и позиции крайних строк)
+void Sql::update_table_info(const std::string& talbe_name) {
     const std::string table_path_name = "tables/" + talbe_name;
     std::vector<ColumnLabel> columns_vec; // вектор из информации о каждой колонке таблицы
     size_t labels_size;
+    size_t bytes_passed = 0; // количество считанных байт
+    size_t bytes_in_row = 0; // количество байт в строке в секции с данными
 
     // Проверка на наличие такой таблицы
     if (!std::filesystem::exists(table_path_name)) {
         throw std::ios_base::failure("Table does not exist\n");
     }
-
+    std::streampos;
     // Открытие таблицы
     FileStreamWithExceptions table;
     table.open_exc(table_path_name, std::ios_base::binary | std::ios_base::in);
 
     // Чтение служебной информации о столбцах таблицы
-    table.read_exc(reinterpret_cast<char*>(&labels_size), sizeof(labels_size));
+    bytes_passed += table.read_exc(reinterpret_cast<char*>(&labels_size), sizeof(labels_size));
     for (size_t i = 0; i < labels_size; ++i) {
         ColumnLabel label;
         std::vector<char> buffer;
 
-        table.read_exc(reinterpret_cast<char*>(&label.name_size), sizeof(label.name_size));
-        // Добавить строку, через копирование веткора
+        bytes_passed += table.read_exc(reinterpret_cast<char*>(&label.name_size), sizeof(label.name_size));
         buffer = std::vector<char>(label.name_size);
-        table.read_exc(buffer.data(), label.name_size);
+        bytes_passed += table.read_exc(buffer.data(), label.name_size); // добавить строку, через копирование веткора
         label.name = std::string(buffer.begin(), buffer.end());
-        table.read_exc(reinterpret_cast<char*>(&label.value_type), sizeof(label.value_type));
-        table.read_exc(reinterpret_cast<char*>(&label.value_default_size), sizeof(label.value_default_size));
-        // Добавить строку, через копирование веткора
+        bytes_passed += table.read_exc(reinterpret_cast<char*>(&label.value_type), sizeof(label.value_type));
+        bytes_passed += table.read_exc(reinterpret_cast<char*>(&label.value_max_size), sizeof(label.value_max_size));
+        bytes_passed += table.read_exc(reinterpret_cast<char*>(&label.value_default_size), sizeof(label.value_default_size));
         buffer = std::vector<char>(label.value_default_size);
-        table.read_exc(buffer.data(), label.value_default_size);
+        bytes_passed += table.read_exc(buffer.data(), label.value_default_size); // добавить строку, через копирование веткора
         label.value_default = std::string(buffer.begin(), buffer.end());
-        table.read_exc(reinterpret_cast<char*>(&label.is_unique), sizeof(label.is_unique));
-        table.read_exc(reinterpret_cast<char*>(&label.is_autoincrement), sizeof(label.is_autoincrement));
-        table.read_exc(reinterpret_cast<char*>(&label.is_key), sizeof(label.is_key));
+        bytes_passed += table.read_exc(reinterpret_cast<char*>(&label.is_unique), sizeof(label.is_unique));
+        bytes_passed += table.read_exc(reinterpret_cast<char*>(&label.is_autoincrement), sizeof(label.is_autoincrement));
+        bytes_passed += table.read_exc(reinterpret_cast<char*>(&label.is_key), sizeof(label.is_key));
 
-        columns_vec.push_back(label); // добавляем 1 колонку
+        columns_vec.push_back(label); // добавляем описание прочитанной колонки
+        bytes_in_row += sizeof(label.value_max_size) + label.value_max_size;
     }
 
-    table_labels[talbe_name] = columns_vec;
-    table.close_exc();
+    table_labels[talbe_name] = columns_vec; // сохраняем описание колонок
+    table_rows[talbe_name].start = bytes_passed; // сохраняем кол-во байт до первой строки
+
+    table.seekg(0, std::ios::end); // перемещаем указатель в конец файла
+    table.seekg(-1*bytes_in_row, std::ios::cur); // возвращаемся в начало последней строки
+    table_rows[talbe_name].last = table.tellg(); // сохранями текущую позицию указателя
+
+    if (table_rows[talbe_name].last < table_rows[talbe_name].start) { // в таблице нет строк
+        table_rows[talbe_name].last = std::nullopt;
+    }
+
+    table.close_exc(); 
 }
 
 
@@ -85,6 +98,7 @@ void Sql::create_table(const std::string& talbe_name, const std::vector<ColumnLa
         // Обращаемся по указателю на первый элемент c-style строки
         table.write_exc(labels[i].name.c_str(), labels[i].name_size);
         table.write_exc(reinterpret_cast<const char*>(&(labels[i].value_type)), sizeof(labels[i].value_type));
+        table.write_exc(reinterpret_cast<const char*>(&(labels[i].value_default_size)), sizeof(labels[i].value_max_size));
         table.write_exc(reinterpret_cast<const char*>(&(labels[i].value_default_size)), sizeof(labels[i].value_default_size));
         // Обращаемся по указателю на первый элемент c-style строки
         table.write_exc(labels[i].value_default.c_str(), labels[i].value_default_size);
@@ -94,12 +108,45 @@ void Sql::create_table(const std::string& talbe_name, const std::vector<ColumnLa
     }
 
     table.close_exc();
-    update_table_label(talbe_name); // сохраняем информацию о новой таблице
+    update_table_info(talbe_name); // сохраняем информацию о новой таблице
 }
 
 
 void Sql::insert(const std::string& talbe_name, const std::vector<variants>& input_values) {
     const size_t input_size = input_values.size();
+
+    /* БЕЗ ИНДЕКСОВ !!!!!!!!!!!!!!!!!!!!!*/
+    /* сделать логику между
+
+        deafult
+        пустой
+        не пустой
+        autoincr
+        unique
+    */
+   
+    for (size_t i = 0; i < input_size; ++i) {
+        // Логика для autoincrement
+        if (table_labels[talbe_name][i].is_autoincrement) {
+            if (table_labels[talbe_name][i].value_default_size != 0) { // если установленно
+                throw;
+            }
+        }
+        if (std::holds_alternative<std::monostate>(input_values[i])) { // если тип пустой
+            if (table_labels[talbe_name][i].value_default_size == 0)
+        }
+        switch(table_labels[talbe_name][i].value_type) { // смотрим на тип в столбце
+            case ValueType::INT32:
+
+                break;
+            case ValueType::BOOL:
+                break;
+            case ValueType::STRING:
+                break;
+            case ValueType::BYTES:
+                break;
+        }
+    }
 
 }
 

@@ -2,14 +2,19 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <unordered_map>
 #include <variant>
 #include <optional>
-
+ 
 using variants = std::variant<std::monostate, int, bool, std::string>;
+
+class Parser;
 
 class Sql {
 private:
+    friend class Parser;
+
     // Доступные типы значений столбцов
     enum class ValueType{
         INT32,
@@ -41,6 +46,9 @@ private:
     // Информация о таблице
     std::unordered_map<std::string, std::vector<ColumnLabel>> table_labels; // храним заголовки и служебную информацию о всех столбцах из каждой таблицы
     std::unordered_map<std::string, RowsPositions> table_rows; // храним позиции начальной и конечной строк таблицы из каждой таблицы
+
+    // Индексы таблиц (обращение вида) index[имя таблицы][имя столбца][значение] = вектор позиций строк с этим значением в таблице>
+    std::map<std::string, std::map<std::string, std::map<variants, std::vector<size_t>>>> index;
 
     void update_table_info(const std::string& talbe_name); // обновляет информацию о таблице
 

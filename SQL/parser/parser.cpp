@@ -1,25 +1,30 @@
 
+#include "parser.h"
 #include <vector>
 #include <string>
 #include <iostream>
 #include <cctype>
-#include "parser.h"
 
-
+bool Parser::is_sep() {
+    if (input[pos] == ',' || input[pos] == ' ' || input[pos] == ';' || input[pos] == '\n' || input[pos] == '\t' \
+    || input[pos] == '{' || input[pos] == '}' || input[pos] == '(' || input[pos] == ')') {
+        return true;
+    }
+    return false;
+}
 void Parser::skip_spaces() {
-    while(input[pos] == ' ' || input[pos] == '\n') {
+    while(input[pos] == ' ' || input[pos] == '\n' || input[pos] == '\t') {
         ++pos;
     }
 }
 
 bool Parser::skip_comma() {
-    bool comma = false;
     skip_spaces();
     if (input[pos] == ',') {
-        comma = true;
         ++pos;
+        return true;
     }
-    return comma;
+    return false;
 }
 
 std::string Parser::to_lower(const std::string& str) {
@@ -39,7 +44,7 @@ std::string Parser::expect_name(bool throw_exceptions = true) {
         name.push_back(input[pos]);
         ++pos;
     }
-    if (input[pos] != ',' && input[pos] != ' ' && input[pos] != '\n' && input[pos] != ')' && input[pos] != '}' && input[pos] != ';' && throw_exceptions) {
+    if (!is_sep() && throw_exceptions) {
         throw "unavailable symbol";
     }
     if (name.size() == 0) {
@@ -61,7 +66,7 @@ std::string Parser::expect_extended_name(bool throw_exceptions = true) {
         ++pos;
         ++name_size;
     }
-    if (input[pos] != ',' && input[pos] != ' ' && input[pos] != '\n' && input[pos] != ')' && input[pos] != '}' && input[pos] != ';' && throw_exceptions) {
+    if (!is_sep() && throw_exceptions) {
         throw "unavailable symbol";
     }
     if (name.size() == 0) {
@@ -81,7 +86,7 @@ std::string Parser::expect_extended_name(bool throw_exceptions = true) {
 //     return names_vec;
 // }
 
-int Parser::expect_value() {
+int Parser::expect_value(bool throw_exceptions = true) {
     skip_spaces();
     std::string str_value;
     size_t str_value_size = 0;
@@ -90,6 +95,12 @@ int Parser::expect_value() {
         str_value.push_back(input[pos]);
         ++pos;
         ++str_value_size;
+    }
+    if (!is_sep() && throw_exceptions) {
+        throw "unavailable symbol";
+    }
+    if (str_value.size() == 0) {
+        throw "empty value";
     }
     return std::stoi(str_value);
 }
@@ -115,16 +126,19 @@ void Parser::expect_ending() {
 
 
 // Прочитать значения разных типов в строку
-std::string Parser::read_int32_str() {
-    return std::to_string(expect_value());
+int Parser::read_int32_str() {
+    return expect_value();
 }
 
-std::string Parser::read_bool_str() {
+bool Parser::read_bool_str() {
     std::string bool_str = expect_command();
-    if (bool_str != "false" && bool_str != "true") {
-        throw "uncorrect bool value";
+    if (bool_str == "false") {
+        return false;
     }
-    return bool_str;
+    else if (bool_str == "true") {
+        return true;
+    }
+    throw "uncorrect bool value";
 }
 
 std::string Parser::read_string_str(const size_t max_size) {
@@ -183,10 +197,16 @@ void Parser::expect_label_attributes(Sql::ColumnLabel* label) {
     label->is_key = false;
 
     skip_spaces();
-    if (input[pos] != '{') { // no attributes
+    if (input[pos] != '{') { // нет аттрибутов
         return;
     }
     ++pos;
+
+    skip_spaces();
+    if (input[pos] == '}') { // пустые скобки (нет аттрибутов)
+        ++pos;
+        return;
+    }
 
     for (int i = 0; i < 3; ++i) {
         std::string str = expect_command();
@@ -209,31 +229,29 @@ void Parser::expect_label_attributes(Sql::ColumnLabel* label) {
 
         skip_comma();
         if (input[pos] == '}') {
-            ++pos;
             break;
         }
     }
     if (input[pos] != '}') {
-        std::cout<<input[pos];
-        exit(-1);
         throw "too many attributes";
     }
+    ++pos;
 }
 
 void Parser::expect_label_name(Sql::ColumnLabel* label) {
-    std::string name = expect_extended_name();
+    std::string name = expect_extended_name(false);
     label->name = name;
     label->name_size = name.size();
 }
 
-int Parser::expect_label_size(Sql::ColumnLabel* label) {
+int Parser::expect_label_size() {
     skip_spaces();
     if (input[pos] != '[') {
         throw "size must be in brackets";
     }
     ++pos;
  
-    int size = expect_value();
+    int size = expect_value(false);
     if (size < 0) {
         throw "size must be positive";
     }
@@ -264,11 +282,11 @@ void Parser::expect_label_type(Sql::ColumnLabel* label) {
     }
     else if (str == "string") {
         label->value_type = Sql::ValueType::STRING;
-        label->value_max_size = expect_label_size(label);
+        label->value_max_size = expect_label_size();
     }
     else if (str == "bytes") {
         label->value_type = Sql::ValueType::BYTES;
-        label->value_max_size = expect_label_size(label);
+        label->value_max_size = expect_label_size();
     }
     else {
         throw "unexpected type";
@@ -279,6 +297,7 @@ void Parser::expect_label_default(Sql::ColumnLabel* label) {
     skip_spaces();
     if (input[pos] != '=') {
         label->value_default_size = 0;
+        label->value_default = std::monostate{};
         return;
     }
     ++pos;
@@ -296,7 +315,7 @@ void Parser::expect_label_default(Sql::ColumnLabel* label) {
         label->value_default = read_bytes_str(label->value_max_size);
     }
 
-    if (label->value_default.size() == 0) {
+    if (std::holds_alternative<std::monostate>(label->value_default)) {
         label->value_default_size = 0;
     }
     else {
@@ -335,7 +354,6 @@ std::vector<Sql::ColumnLabel> Parser::expect_label() {
     return labels_vec;
 }
 
-
 void Parser::execute(const std::string& str) {
     if (str.back() != ';') {
         throw "cant find closing symbol";
@@ -356,22 +374,34 @@ void Parser::execute(const std::string& str) {
             query_labels = expect_label();
             expect_ending();
 
-            ///!!!!!!!!!!!!!!!!!!!!!!!!!!
-            std::cout << query_table_name << '\n';
-            int i = 0;
-            for (Sql::ColumnLabel lab : query_labels) {
-                std::cout << "col" << i << ":\n";
-                std::cout << "name_size" << " = " << lab.name_size << '\n';
-                std::cout << "name" << " = " << lab.name << '\n';
-                std::cout << "value_type" << " = " << (int)lab.value_type << '\n';
-                std::cout << "value_max_size" << " = " << lab.value_max_size << '\n';
-                std::cout << "value_default_size" << " = " << lab.value_default_size << '\n';
-                std::cout << "value_default" << " = " << lab.value_default << '\n';
-                std::cout << "is_unique" << " = " << lab.is_unique << '\n';
-                std::cout << "is_autoincrement" << " = " << lab.is_autoincrement << '\n';
-                std::cout << "is_key" << " = " << lab.is_key << '\n';
-                ++i;
-            }
+            db.create_table(query_table_name, query_labels);
+
+            // std::cout << query_table_name << '\n';
+            // int i = 0;
+            // for (Sql::ColumnLabel lab : query_labels) {
+            //     std::cout << "col" << i << ":\n";
+            //     std::cout << "name_size" << " = " << lab.name_size << '\n';
+            //     std::cout << "name" << " = " << lab.name << '\n';
+            //     std::cout << "value_type" << " = " << (int)lab.value_type << '\n';
+            //     std::cout << "value_max_size" << " = " << lab.value_max_size << '\n';
+            //     std::cout << "value_default_size" << " = " << lab.value_default_size << '\n';
+            //     if (std::holds_alternative<std::monostate>(lab.value_default)) {
+            //         std::cout << "value_default" << " = " << "NULL";
+            //     }
+            //     else if (std::holds_alternative<int>(lab.value_default)){
+            //         std::cout << "value_default" << " = " << std::get<int>(lab.value_default) << '\n';
+            //     }
+            //     else if (std::holds_alternative<bool>(lab.value_default)){
+            //         std::cout << "value_default" << " = " << std::get<bool>(lab.value_default) << '\n';
+            //     }
+            //     else if (std::holds_alternative<std::string>(lab.value_default)){
+            //         std::cout << "value_default" << " = " << std::get<std::string>(lab.value_default) << '\n';
+            //     }
+            //     std::cout << "is_unique" << " = " << lab.is_unique << '\n';
+            //     std::cout << "is_autoincrement" << " = " << lab.is_autoincrement << '\n';
+            //     std::cout << "is_key" << " = " << lab.is_key << '\n';
+            //     ++i;
+            // }
         }
         // else if (command == "insert") {
         //     //
@@ -394,6 +424,7 @@ void Parser::execute(const std::string& str) {
 
 int main() {
 	Parser parser;
-	parser.execute("create table users ({key, autoincrement} id :int32, {unique} login: string[32], password_hash: bytes[8], is_admin:bool = false);");
+
+	//parser.execute("cReAtE tAbLe tEsT ({}iD:int32,{unique,autoincrement,key}lOgIn:string[32],   paSSwoRd_hash22   :   bytes \n  [ \n  8   ]   ,   iS_aDmIn  \n : \n  bool=fAlSE);");
     return 0;
 }

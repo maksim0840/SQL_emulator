@@ -166,3 +166,4 @@ void Sql::read_table_indexes(const std::string& table_name, const size_t bytes_i
     
     table.close_exc(); 
 }
+

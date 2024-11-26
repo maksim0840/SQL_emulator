@@ -447,7 +447,7 @@ void Parser::execute(const std::string& str) {
             query_column_name = expect_extended_name();
             expect_ending();
 
-            db.create_index(query_table_name, query_column_name, query_index_type);
+            Sql::set_table_indexes();
         }
         // else if (command == "insert") {
         //     //

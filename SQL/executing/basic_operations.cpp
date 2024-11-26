@@ -1,5 +1,6 @@
 
 #include "../setup/tables_info.cpp"
+#include "../condition/condition.cpp"
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -9,6 +10,11 @@
 #include <variant>
 #include <optional>
 
+// Заменяет значение во всех строчках по условию Condition
+void replace(const std::string& table_name, const std::string column_name) { 
+ ///////////////////// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ///// ???? <=> update table ?
+}
 
 void Sql::create_table(const std::string& table_name, const std::vector<ColumnLabel>& labels) {
     const std::string table_path_name = "../data/" + table_name;
@@ -96,8 +102,57 @@ void Sql::insert(const std::string& table_name, const std::vector<variants>& inp
 
 }
 
-void create_index(const std::string& table_name, const std::string& column_name, const IndexType index_type) {
+// устанавливает флаги в заголовок таблицы для столбца column_name
+void Sql::create_index(const std::string& table_name, const std::string& column_name, const IndexType index_type) {
+    const std::string table_path_name = "../data/" + table_name;
+    // Проверка на наличие такой таблицы
+    if (!std::filesystem::exists(table_path_name)) {
+        throw std::ios_base::failure("Table does not exist\n");
+    }
     
+    // Открытие таблицы
+    FileStreamWithExceptions table;
+    table.open_exc(table_path_name, std::ios_base::binary | std::ios_base::in | std::ios_base::out); // для замены нужно открыть в режиме rw
+
+    // Чтение служебной информации о столбцах таблицы
+    size_t labels_size;
+    table.read_exc(reinterpret_cast<char*>(&labels_size), sizeof(labels_size));
+
+    for (size_t i = 0; i < labels_size; ++i) {
+        std::string name;
+        size_t buffer_size;
+        std::vector<char> buffer;
+
+        table.read_exc(reinterpret_cast<char*>(&buffer_size), sizeof(buffer_size)); // name_size
+        buffer = std::vector<char>(buffer_size);
+        table.read_exc(buffer.data(), buffer_size); // name
+        name = std::string(buffer.begin(), buffer.end()); // добавить строку, через копирование веткора
+        table.seekg(sizeof(Sql::ValueType), std::ios::cur); // value_type
+        table.seekg(sizeof(size_t), std::ios::cur); // max_size
+        table.read_exc(reinterpret_cast<char*>(&buffer_size), sizeof(buffer_size)); // default_size
+        table.seekg(buffer_size, std::ios::cur); // value_default
+        table.seekg(sizeof(bool), std::ios::cur); // is_unique
+        table.seekg(sizeof(bool), std::ios::cur); // is_autoincrement
+        table.seekg(sizeof(bool), std::ios::cur); // is_key
+        if (name == table_name && index_type == IndexType::ORDERED) {
+            bool ord = true;
+            table.write_exc(reinterpret_cast<const char*>(&ord), sizeof(ord)); // is_ordered
+            table.seekg(sizeof(bool), std::ios::cur); // is_unordered
+            Sql::read_table_indexes(table_name, bytes_in_row, table_ordered_indexes, table_unordered_indexes)
+            return;
+        }
+        else if (name == table_name && index_type == IndexType::UNORDERED) {
+            bool ord = true;
+            table.seekg(sizeof(bool), std::ios::cur); // is_ordered
+            table.write_exc(reinterpret_cast<const char*>(&ord), sizeof(ord));// is_unordered
+            Sql::read_table_indexes(table_name, bytes_in_row, table_ordered_indexes, table_unordered_indexes)
+            return;
+        }
+        table.seekg(sizeof(bool), std::ios::cur); // is_ordered
+        table.seekg(sizeof(bool), std::ios::cur); // is_unordered
+    }
+
+    throw "cant find column name in table"
 }
     
     

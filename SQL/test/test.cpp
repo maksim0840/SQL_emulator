@@ -139,7 +139,7 @@ bool Tests::check_labels_in_table(const std::vector<Sql::ColumnLabel>& labels_fo
 // };
 
 // Конфликтующие параметры (notnull default и unique)
-// TEST(create_table, test9) {
+// TEST(create_table, test10) {
 //     Parser parser;
 //     EXPECT_ANY_THROW(parser.execute("create table TEST ({unique} value : int32 = 1001);"));
 // };

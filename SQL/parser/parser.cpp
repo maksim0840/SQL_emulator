@@ -618,13 +618,3 @@ void Parser::execute(const std::string& str) {
 }
 
 
-int main() {
-    // if (!std::filesystem::remove("../data/users")) {
-    //     throw "cant remove test table";
-    // }
-	Parser parser;
-    parser.execute("create table users ({key, autoincrement} id : int32, {unique} login: string[32], password_hash: bytes[8], is_admin: bool = false);");
-	//parser.execute("insert (,  \"vasya\", 0xdeadbeefdeadbeef, false) to users;");
-
-    return 0;
-}

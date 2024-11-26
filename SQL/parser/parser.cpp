@@ -170,7 +170,7 @@ std::string Parser::read_string_str(const size_t max_size) {
     return str;
 }
 
-std::string Parser::read_bytes_str(const size_t max_size) {
+std::string Parser::read_bytes_str(const size_t max_size, bool can_be_smaller = false) {
     skip_spaces();
     if (input[pos] != '0' || input[pos + 1] != 'x') {
         throw "uncorrect bytes format";
@@ -186,7 +186,8 @@ std::string Parser::read_bytes_str(const size_t max_size) {
             bytes.push_back(std::tolower(input[pos]));
         }
         else {
-            throw "uncorrect byte";
+            if (!can_be_smaller) throw "uncorrect byte";
+            else break;
         }
         ++pos;
     }
@@ -396,6 +397,7 @@ void Parser::check_for_dublicated_columns(const std::vector<Sql::ColumnLabel>& l
     }
 }
 
+
 Sql::IndexType Parser::expect_index_type() {
     std::string str = expect_command();
     if (str == "ordered") {
@@ -405,6 +407,137 @@ Sql::IndexType Parser::expect_index_type() {
         return Sql::IndexType::UNORDERED;
     }
     throw("unexpected index type");
+}
+
+Parser::InsertingType Parser::determine_inserting_type() {
+    size_t saved_pos = pos;
+
+    while(input[pos] != ';') {
+        if (input[pos] == '=') { 
+            pos = saved_pos;
+            return InsertingType::BY_ASSIGNMENT;
+        }
+        ++pos;
+    }
+    pos = saved_pos;
+    return InsertingType::BY_ORDER;
+
+    
+}
+
+void Parser::expect_order_value(std::vector<Parser::InsertingValueInfo>* row_values) {
+    skip_spaces();
+    
+    if (input[pos] == ',' || input[pos] == '(') {
+        InsertingValueInfo value_info = {.value_=std::monostate{}, .type_=Sql::ValueType::INT32};
+        row_values->push_back(value_info);
+    }
+    else if (input[pos] == '0' && input[pos + 1] == 'x') {
+        InsertingValueInfo value_info = {.value_=read_bytes_str(sz, true), .type_=Sql::ValueType::BYTES}; 
+        row_values->push_back(value_info);
+    }
+    else if (std::isdigit(input[pos])) {
+        InsertingValueInfo value_info = {.value_=read_int32_str(), .type_=Sql::ValueType::INT32}; 
+        row_values->push_back(value_info);
+    }
+    else if (std::isalpha(input[pos])) {
+        InsertingValueInfo value_info = {.value_=read_bool_str(), .type_=Sql::ValueType::BOOL}; 
+        row_values->push_back(value_info);
+    }
+    else if (input[pos] == '"') {
+        InsertingValueInfo value_info = {.value_=read_string_str(sz), .type_=Sql::ValueType::STRING};; 
+        row_values->push_back(value_info);
+    }
+    else {
+        throw "unexpected symbol";
+    }
+}
+
+void Parser::expect_assignment_value(std::vector<InsertingValueInfo>* row_values) {
+    skip_spaces();
+    std::string name = expect_extended_name(false);
+
+    skip_spaces();
+    if (input[pos] != '=') {
+        throw "unexpected symbol";
+    }
+    ++pos;
+
+    expect_order_value(row_values);
+    row_values->back().name_ = name;
+}
+
+Parser::InsertingType Parser::expect_row_values(std::vector<InsertingValueInfo>* row_values) {
+
+    skip_spaces();
+    if (input[pos] != '(') {
+        throw "cant open row_values section";
+    }
+    ++pos;
+
+    Parser::InsertingType inserting_type = determine_inserting_type();
+
+    // Добавляем значения в соотвествии с их типом
+    while (input[pos] != ';') {
+        if (inserting_type == Parser::InsertingType::BY_ORDER) {
+            expect_order_value(row_values);
+        }
+        else if (inserting_type == Parser::InsertingType::BY_ASSIGNMENT) {
+            expect_assignment_value(row_values);
+        }
+        if (!skip_comma()) break;
+    }
+   
+    if (input[pos] != ')') {
+        throw "cant close row_values section";
+    }
+    ++pos;
+
+    return inserting_type;
+}
+
+std::unordered_map<std::string, variants> Parser::prepare_row_order_values(const std::vector<InsertingValueInfo>& old_row_values, const std::vector<Sql::ColumnLabel>& labels) {
+    std::unordered_map<std::string, variants> new_row_values;
+    // Проверка полноты введённых значений
+    size_t labels_size = labels.size();
+    if (labels_size != old_row_values.size()) {
+        throw "unequal number of row components";
+    }
+
+    size_t cur_label = 0;
+    for (size_t i = 0; i < labels_size; ++i) {
+        // Проверка введённых значений на совпадение типов со столбцами
+        if (!std::holds_alternative<std::monostate>(old_row_values[i].value_) && labels[i].value_type != old_row_values[i].type_) {
+            throw "uncorrect value type";
+        }
+        new_row_values[labels[i].name] = old_row_values[i].value_;
+    }
+    return new_row_values;
+}
+
+std::unordered_map<std::string, variants> Parser::prepare_row_assignment_values(const std::vector<InsertingValueInfo>& old_row_values, const std::vector<Sql::ColumnLabel>& labels) {
+    std::unordered_map<std::string, variants> new_row_values;
+
+    // Для удобного обращения
+    std::unordered_map<std::string, Sql::ColumnLabel> labels_by_name;
+    for (const auto& label : labels) {
+        labels_by_name[label.name] = label;
+        new_row_values[label.name] = std::monostate{}; // для незаполненных значений
+    }
+    auto not_exist = labels_by_name.end();
+
+    for (const auto& value_info : old_row_values) {
+        // Проверка введённых значений на совпадение имён со столбцами
+        if (labels_by_name.find(value_info.name_) == not_exist) {
+            throw "uncorrect column name";
+        }
+        // Проверка введённых значений на совпадение типов со столбцами
+        if (!std::holds_alternative<std::monostate>(value_info.value_) && labels_by_name[value_info.name_].value_type != value_info.type_) {
+            throw "uncorrect value type";
+        }
+        new_row_values[value_info.name_] = value_info.value_;
+    }
+    return new_row_values;
 }
 
 void Parser::execute(const std::string& str) {
@@ -447,11 +580,28 @@ void Parser::execute(const std::string& str) {
             query_column_name = expect_extended_name();
             expect_ending();
 
-            Sql::set_table_indexes();
+            db.create_index(query_table_name, query_column_name, query_index_type);
         }
-        // else if (command == "insert") {
-        //     //
-        // }
+        else if (command == "insert") {
+            std::string query_table_name;
+            std::vector<InsertingValueInfo> row_values;
+
+            InsertingType inserting_type = expect_row_values(&row_values);
+            expect_keyword("to");
+            query_table_name = expect_extended_name();
+            expect_ending();
+
+            // Проверка значений и подготовка к отправке
+            std::unordered_map<std::string, variants> query_row_values;
+            if (inserting_type == InsertingType::BY_ORDER) {
+                query_row_values = prepare_row_order_values(row_values, db.table_labels[query_table_name]);
+            }
+            else if (inserting_type == InsertingType::BY_ASSIGNMENT)  {
+                query_row_values = prepare_row_assignment_values(row_values, db.table_labels[query_table_name]);
+            }
+            
+             // db.insert(query_table_name, query_row_values)
+        }
         // else if (command == "select") {
         //     //
         // }
@@ -468,9 +618,13 @@ void Parser::execute(const std::string& str) {
 }
 
 
-// int main() {
-// 	Parser parser;
-// 	parser.execute("cReAtE ordered index, on users by login;");
-    
-//     return 0;
-// }
+int main() {
+    // if (!std::filesystem::remove("../data/users")) {
+    //     throw "cant remove test table";
+    // }
+	Parser parser;
+    parser.execute("create table users ({key, autoincrement} id : int32, {unique} login: string[32], password_hash: bytes[8], is_admin: bool = false);");
+	//parser.execute("insert (,  \"vasya\", 0xdeadbeefdeadbeef, false) to users;");
+
+    return 0;
+}

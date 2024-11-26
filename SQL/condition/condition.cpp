@@ -1,9 +1,9 @@
 #include "condition.h"
 
 // Проверяет соответствует ли переданная строка заданным эталонным значениям
-bool Condition::check (const std::unordered_map<std::string, variants>& cmp_row) {
+bool Condition::check(const std::unordered_map<std::string, variants>& cmp_row) {
     for (const auto& [key, value] : manual_) {
-        if (cmp_row[key] != value) {
+        if (cmp_row.at(key) != value) {
             return false;
         }
     }
@@ -11,10 +11,10 @@ bool Condition::check (const std::unordered_map<std::string, variants>& cmp_row)
 }
 
 // Конструктор
-Condition::Condition(std::string table_name, std::unordered_map<std::string, variants> manual) {
+Condition::Condition(const std::vector<Sql::ColumnLabel>& table_labels, std::unordered_map<std::string, variants> manual) {
     // Сохраняет все названия столбцов таблицы
     std::unordered_set<std::string> columns_names;
-    for (const auto& label : table_labels[table_name]) {
+    for (const auto& label : table_labels) {
         columns_names.insert(label.name);
     }
     auto not_exist = columns_names.end();

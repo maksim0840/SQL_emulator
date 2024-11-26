@@ -11,9 +11,9 @@ private:
 
 public:
     // Проверяет соответствует ли переданная строка заданным эталонным значениям
-    bool check (const std::unordered_map<std::string, variants>& cmp_row);
+    bool check(const std::unordered_map<std::string, variants>& cmp_row);
 
-    Condition(std::string table_name, std::unordered_map<std::string, variants> manual);
+    Condition(const std::vector<Sql::ColumnLabel>& table_labels, std::unordered_map<std::string, variants> manual);
     ~Condition();
     
 };

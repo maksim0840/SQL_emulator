@@ -27,7 +27,7 @@ private:
     int read_int32_str();
     bool read_bool_str();
     std::string read_string_str(const size_t max_size);
-    std::string read_bytes_str(const size_t max_size);
+    std::string read_bytes_str(const size_t max_size, bool can_be_smaller);
 
     // для create table
     void expect_label_attributes(Sql::ColumnLabel* label);
@@ -43,6 +43,23 @@ private:
     // для create index
     Sql::IndexType expect_index_type();
 
+    // для insert
+    enum class InsertingType {
+        BY_ORDER,
+        BY_ASSIGNMENT
+    };
+    struct InsertingValueInfo {
+        std::string name_;
+        variants value_;
+        Sql::ValueType type_;
+    };
+    void expect_order_value(std::vector<InsertingValueInfo>* row_values);
+    void expect_assignment_value(std::vector<InsertingValueInfo>* row_values);
+    InsertingType determine_inserting_type(); // определить как задаются значения (по очереди или прямым назначением)
+    InsertingType expect_row_values(std::vector<InsertingValueInfo>* row_values);
+    std::unordered_map<std::string, variants> prepare_row_order_values(const std::vector<InsertingValueInfo>& old_row_values, const std::vector<Sql::ColumnLabel>& labels); // проверка введенных значений
+    std::unordered_map<std::string, variants> prepare_row_assignment_values(const std::vector<InsertingValueInfo>& old_row_values, const std::vector<Sql::ColumnLabel>& labels); // проверка введенных значений
+ 
 public:
 	void execute(const std::string& str);
 };

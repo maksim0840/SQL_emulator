@@ -11,7 +11,7 @@
 
 
 void Sql::create_table(const std::string& table_name, const std::vector<ColumnLabel>& labels) {
-    const std::string table_path_name = "tables/" + table_name;
+    const std::string table_path_name = "../data/" + table_name;
     const size_t labels_size = labels.size();
 
     // Проверка на наличие такой таблицы
@@ -33,16 +33,21 @@ void Sql::create_table(const std::string& table_name, const std::vector<ColumnLa
         table.write_exc(reinterpret_cast<const char*>(&(labels[i].value_type)), sizeof(labels[i].value_type));
         table.write_exc(reinterpret_cast<const char*>(&(labels[i].value_max_size)), sizeof(labels[i].value_max_size));
         table.write_exc(reinterpret_cast<const char*>(&(labels[i].value_default_size)), sizeof(labels[i].value_default_size));
-        // Проверяем хранящийся тип
+        // Проверяем хранящийся тип (std::monostate не записываем в файл)
         if (std::holds_alternative<std::string>(labels[i].value_default)) {
             table.write_exc(std::get<std::string>(labels[i].value_default).c_str(), labels[i].value_default_size);
         }
-        else if (!std::holds_alternative<std::monostate>(labels[i].value_default)) { // std::monostate не записываем в файл
-            table.write_exc(reinterpret_cast<const char*>(&(labels[i].value_default)), labels[i].value_default_size);
+        else if (std::holds_alternative<int>(labels[i].value_default)) { // std::monostate не записываем в файл
+            table.write_exc(reinterpret_cast<const char*>(&(std::get<int>(labels[i].value_default))), labels[i].value_default_size);
+        } 
+        else if (std::holds_alternative<bool>(labels[i].value_default)) { // std::monostate не записываем в файл
+            table.write_exc(reinterpret_cast<const char*>(&(std::get<bool>(labels[i].value_default))), labels[i].value_default_size);
         } 
         table.write_exc(reinterpret_cast<const char*>(&(labels[i].is_unique)), sizeof(labels[i].is_unique));
         table.write_exc(reinterpret_cast<const char*>(&(labels[i].is_autoincrement)), sizeof(labels[i].is_autoincrement));
         table.write_exc(reinterpret_cast<const char*>(&(labels[i].is_key)), sizeof(labels[i].is_key));
+        table.write_exc(reinterpret_cast<const char*>(&(labels[i].is_ordered)), sizeof(labels[i].is_ordered));
+        table.write_exc(reinterpret_cast<const char*>(&(labels[i].is_unordered)), sizeof(labels[i].is_unordered));
     }
 
     table.close_exc();
@@ -90,3 +95,9 @@ void Sql::insert(const std::string& table_name, const std::vector<variants>& inp
     }
 
 }
+
+void create_index(const std::string& table_name, const std::string& column_name, const IndexType index_type) {
+    
+}
+    
+    

@@ -4,6 +4,7 @@
 #include <string>
 #include <iostream>
 #include <cctype>
+#include <unordered_set>
 
 bool Parser::is_sep() {
     if (input[pos] == ',' || input[pos] == ' ' || input[pos] == ';' || input[pos] == '\n' || input[pos] == '\t' \
@@ -109,11 +110,15 @@ std::string Parser::expect_command() {
     return to_lower(expect_name());
 }
 
-void Parser::expect_keyword(const std::string& keyword) {
+bool Parser::expect_keyword(const std::string& keyword, bool throw_exceptions = true) {
+    size_t prev_pos = pos;
     std::string str =  expect_command();
     if (keyword != str) {
-        throw "unknown keyword";
+        if (throw_exceptions) throw "unknown keyword";
+        pos = prev_pos; // если ключевое слово неверное и исключение не ожидается, то возвращаемся назад (в начало предполагаемого keyword)
+        return false;
     }
+    return true;
 }
 
 void Parser::expect_ending() {
@@ -354,6 +359,54 @@ std::vector<Sql::ColumnLabel> Parser::expect_label() {
     return labels_vec;
 }
 
+void Parser::check_for_correct_attributes(std::vector<Sql::ColumnLabel>* labels) {
+    size_t labels_size = labels->size();
+
+    for (size_t i = 0; i < labels_size; ++i) {
+        if ((*labels)[i].is_key) {
+            (*labels)[i].is_unique = true;
+        }
+        if ((*labels)[i].value_default_size != 0 && ((*labels)[i].is_unique || (*labels)[i].is_autoincrement)) {
+            throw "cant set default value with attributes";
+        }
+    }
+}   
+
+void Parser::determine_indexes_by_attributes(std::vector<Sql::ColumnLabel>* labels) {
+    size_t labels_size = labels->size();
+
+    for (size_t i = 0; i < labels_size; ++i) {
+        (*labels)[i].is_ordered = false;
+        (*labels)[i].is_unordered = false;
+
+        if ((*labels)[i].is_key) {
+            (*labels)[i].is_ordered = true;
+        }
+    }
+}
+    
+void Parser::check_for_dublicated_columns(const std::vector<Sql::ColumnLabel>& labels) {
+    std::unordered_set<std::string> unique;
+
+    for (const auto& label : labels) {
+        if (unique.find(label.name) != unique.end()) {
+            throw "dublicated columns names";
+        }
+        unique.insert(label.name);
+    }
+}
+
+Sql::IndexType Parser::expect_index_type() {
+    std::string str = expect_command();
+    if (str == "ordered") {
+        return Sql::IndexType::ORDERED;
+    }
+    else if (str == "unordered") {
+        return Sql::IndexType::UNORDERED;
+    }
+    throw("unexpected index type");
+}
+
 void Parser::execute(const std::string& str) {
     if (str.back() != ';') {
         throw "cant find closing symbol";
@@ -365,43 +418,36 @@ void Parser::execute(const std::string& str) {
     while (pos < sz) { // если несколько запросов в одном, то проходим все
         std::string command = expect_command();
 
-        if (command == "create") {
+        // create table
+        if (command == "create" && expect_keyword("table", false)) {
             std::string query_table_name;
             std::vector<Sql::ColumnLabel> query_labels;
 
-            expect_keyword("table");
             query_table_name = expect_extended_name();
             query_labels = expect_label();
             expect_ending();
 
-            db.create_table(query_table_name, query_labels);
+            check_for_correct_attributes(&query_labels);
+            determine_indexes_by_attributes(&query_labels);
+            check_for_dublicated_columns(query_labels);
 
-            // std::cout << query_table_name << '\n';
-            // int i = 0;
-            // for (Sql::ColumnLabel lab : query_labels) {
-            //     std::cout << "col" << i << ":\n";
-            //     std::cout << "name_size" << " = " << lab.name_size << '\n';
-            //     std::cout << "name" << " = " << lab.name << '\n';
-            //     std::cout << "value_type" << " = " << (int)lab.value_type << '\n';
-            //     std::cout << "value_max_size" << " = " << lab.value_max_size << '\n';
-            //     std::cout << "value_default_size" << " = " << lab.value_default_size << '\n';
-            //     if (std::holds_alternative<std::monostate>(lab.value_default)) {
-            //         std::cout << "value_default" << " = " << "NULL";
-            //     }
-            //     else if (std::holds_alternative<int>(lab.value_default)){
-            //         std::cout << "value_default" << " = " << std::get<int>(lab.value_default) << '\n';
-            //     }
-            //     else if (std::holds_alternative<bool>(lab.value_default)){
-            //         std::cout << "value_default" << " = " << std::get<bool>(lab.value_default) << '\n';
-            //     }
-            //     else if (std::holds_alternative<std::string>(lab.value_default)){
-            //         std::cout << "value_default" << " = " << std::get<std::string>(lab.value_default) << '\n';
-            //     }
-            //     std::cout << "is_unique" << " = " << lab.is_unique << '\n';
-            //     std::cout << "is_autoincrement" << " = " << lab.is_autoincrement << '\n';
-            //     std::cout << "is_key" << " = " << lab.is_key << '\n';
-            //     ++i;
-            // }
+            db.create_table(query_table_name, query_labels);
+        }
+        // create index
+        else if (command == "create") {
+            std::string query_table_name;
+            std::string query_column_name;
+            Sql::IndexType query_index_type;
+
+            query_index_type = expect_index_type();
+            expect_keyword("index");
+            expect_keyword("on");
+            query_table_name = expect_extended_name();
+            expect_keyword("by");
+            query_column_name = expect_extended_name();
+            expect_ending();
+
+            db.create_index(query_table_name, query_column_name, query_index_type);
         }
         // else if (command == "insert") {
         //     //
@@ -422,9 +468,9 @@ void Parser::execute(const std::string& str) {
 }
 
 
-int main() {
-	Parser parser;
-
-	//parser.execute("cReAtE tAbLe tEsT ({}iD:int32,{unique,autoincrement,key}lOgIn:string[32],   paSSwoRd_hash22   :   bytes \n  [ \n  8   ]   ,   iS_aDmIn  \n : \n  bool=fAlSE);");
-    return 0;
-}
+// int main() {
+// 	Parser parser;
+// 	parser.execute("cReAtE ordered index, on users by login;");
+    
+//     return 0;
+// }

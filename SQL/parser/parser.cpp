@@ -663,6 +663,7 @@ void Parser::execute(const std::string& str) {
 }
 
 
+<<<<<<< HEAD
 // int main() {
    
 // 	Parser parser;
@@ -672,3 +673,5 @@ void Parser::execute(const std::string& str) {
 
 //     return 0;
 // }
+=======
+>>>>>>> 5ac42c08fe539b8a04f9212e51c67746c3e08632

@@ -1,5 +1,4 @@
-
-
+	
 # Enable code coverage flags
 SET(CMAKE_CXX_FLAGS "-g -O0 -Wall -fprofile-arcs -ftest-coverage")
 SET(CMAKE_C_FLAGS "-g -O0 -Wall -W -fprofile-arcs -ftest-coverage")
@@ -18,12 +17,7 @@ FetchContent_MakeAvailable(googletest)
 enable_testing()
 include(GoogleTest)
 
-#add_executable(test test.cpp)
+add_executable(test_binary test.cpp)
+target_link_libraries(test_binary GTest::gtest_main)
 
-# добавляем в качестве static библиотеки: есть .cpp файлы, требуется компиляция файлов
-add_library(test STATIC test.cpp test.h)
-
-# сообщаем о зависимости test от parser и gtest_main
-target_link_libraries(test PUBLIC parser GTest::gtest_main)
-
-gtest_discover_tests(test)
+gtest_discover_tests(test_binary)

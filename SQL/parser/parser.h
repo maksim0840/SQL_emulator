@@ -49,7 +49,7 @@ private:
         BY_ASSIGNMENT
     };
     struct InsertingValueInfo {
-        std::string name_;
+        std::string name_ = "";
         variants value_;
         Sql::ValueType type_;
     };
@@ -59,7 +59,10 @@ private:
     InsertingType expect_row_values(std::vector<InsertingValueInfo>* row_values);
     std::unordered_map<std::string, variants> prepare_row_order_values(const std::vector<InsertingValueInfo>& old_row_values, const std::vector<Sql::ColumnLabel>& labels); // проверка введенных значений
     std::unordered_map<std::string, variants> prepare_row_assignment_values(const std::vector<InsertingValueInfo>& old_row_values, const std::vector<Sql::ColumnLabel>& labels); // проверка введенных значений
- 
+    
+    // для select
+    std::unordered_set<std::string> expect_columns_names();
+
 public:
 	void execute(const std::string& str);
 };

@@ -78,7 +78,6 @@ size_t Sql::read_table_labels(const std::string& table_name, std::vector<ColumnL
         ColumnLabel label;
         std::vector<char> buffer;
         table.read_exc(reinterpret_cast<char*>(&label.name_size), sizeof(label.name_size));
-
         buffer = std::vector<char>(label.name_size);
         table.read_exc(buffer.data(), label.name_size);
         label.name = std::string(buffer.begin(), buffer.end()); // добавить строку, через копирование веткора
@@ -91,7 +90,6 @@ size_t Sql::read_table_labels(const std::string& table_name, std::vector<ColumnL
         table.read_exc(reinterpret_cast<char*>(&label.is_key), sizeof(label.is_key));
         table.read_exc(reinterpret_cast<char*>(&label.is_ordered), sizeof(label.is_ordered));
         table.read_exc(reinterpret_cast<char*>(&label.is_unordered), sizeof(label.is_unordered));
-
         labels->push_back(label); // добавляем описание прочитанной колонки
     }
 
@@ -150,14 +148,13 @@ void Sql::read_table_indexes(const std::string& table_name, OrderedIndex* ordere
 
     table.seekg(table_positions[table_name].start, std::ios::beg);// переместим на начало данных
 
-    size_t bytes_in_row = count_bytes_in_row(table_name);
-    size_t rows_size = (table_positions[table_name].last.value() - table_positions[table_name].start + 1) / bytes_in_row + 1; // количетсво строк
-    
-    size_t columns_size = table_labels[table_name].size();
-    for (size_t cur_row = 0; cur_row < rows_size; ++cur_row) { // по количеству строк
-        size_t row_position = table.tellg(); // позиция начала текущей строки
+    size_t rows_in_table = count_rows_in_table(table_name);
+    size_t columns_in_table = table_labels[table_name].size();
 
-        for (size_t i = 0; i < columns_size; ++i) { // по количеству столбцов
+    for (size_t row = 0; row < rows_in_table; ++row) { // по количеству строк
+        size_t row_position = table.tellg(); // позиция начала текущей строки
+        for (size_t i = 0; i < columns_in_table; ++i) { // по количеству столбцов
+
             const auto& label = table_labels[table_name][i];
             size_t value_size;
             table.read_exc(reinterpret_cast<char*>(&value_size), sizeof(value_size));
@@ -174,7 +171,11 @@ void Sql::read_table_indexes(const std::string& table_name, OrderedIndex* ordere
     table.close_exc(); 
 }
 
-size_t Sql::count_bytes_in_row(const std::string table_name) {
+
+
+
+// количество байт в строке
+size_t Sql::count_bytes_in_row(const std::string& table_name) {
     if (table_positions[table_name].last == std::nullopt) { // если данных нет
         return 0;
     }
@@ -185,4 +186,23 @@ size_t Sql::count_bytes_in_row(const std::string table_name) {
     }
 
     return bytes_in_row;
+}
+
+// количество строк в таблице
+size_t Sql::count_rows_in_table(const std::string& table_name) {
+    if (table_positions[table_name].last == std::nullopt) {
+        return 0;
+    }
+
+    size_t bytes_in_row = Sql::count_bytes_in_row(table_name);
+    return (table_positions[table_name].last.value() - table_positions[table_name].start + 1) / bytes_in_row + 1;
+}
+
+std::vector<std::string> Sql::get_label_names(const std::string& table_name) {
+    std::vector<std::string> label_names;
+    for (const auto& label : table_labels[table_name]) {
+        label_names.push_back(label.name);
+    }
+
+    return label_names;
 }

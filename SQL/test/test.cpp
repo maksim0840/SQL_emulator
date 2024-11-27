@@ -54,7 +54,7 @@ bool Tests::check_index_in_table(const Sql::IndexType index_type, const std::str
 }
 
 
-// TEST(create_table, test1) {
+TEST(create_table, test1) {
     Parser parser;
     parser.execute("create table TEST ({key, autoincrement} id : int32, {unique} login: string[32], password_hash: bytes[8], is_admin: bool = false);");
 
@@ -70,13 +70,13 @@ bool Tests::check_index_in_table(const Sql::IndexType index_type, const std::str
     }
 };
 
-// TEST(create_table, test2) {
+TEST(create_table, test2) {
     Parser parser;
     parser.execute("cReAtE \n tAbLe \n tEsT ({}iD:int32,{UniQue,autoiNcrement,kEy}lOgIn:string[32],   pa99woRd_hash   :   bytes \n  [ \n  8   ]   ,   iS_aDmIn  \n : \n  bool=fAlSE);");
     
     std::vector<Sql::ColumnLabel> labels_cmp = {
         {.name_size=2, .name="iD", .value_type=Sql::ValueType::INT32, .value_max_size=4, .value_default_size=0, .value_default=std::monostate{}, .is_unique=false, .is_autoincrement=false, .is_key=false, .is_ordered=false, .is_unordered=false},
-        {.name_size=5, .name="lOgIn", .value_type=Sql::ValueType::STRING, .value_max_size=32, .value_default_size=0, .value_default=std::monostate{}, .is_unique=true, .is_autoincrement=true, .is_key=true, .is_ordered=trye, .is_unordered=false},
+        {.name_size=5, .name="lOgIn", .value_type=Sql::ValueType::STRING, .value_max_size=32, .value_default_size=0, .value_default=std::monostate{}, .is_unique=true, .is_autoincrement=true, .is_key=true, .is_ordered=true, .is_unordered=false},
         {.name_size=13, .name="pa99woRd_hash", .value_type=Sql::ValueType::BYTES, .value_max_size=8, .value_default_size=0, .value_default=std::monostate{}, .is_unique=false, .is_autoincrement=false, .is_key=false, .is_ordered=false, .is_unordered=false},
         {.name_size=8, .name="iS_aDmIn", .value_type=Sql::ValueType::BOOL, .value_max_size=1, .value_default_size=1, .value_default=false, .is_unique=false, .is_autoincrement=false, .is_key=false, .is_ordered=false, .is_unordered=false}
     };
@@ -86,7 +86,7 @@ bool Tests::check_index_in_table(const Sql::IndexType index_type, const std::str
     }
 };
 
-// TEST(create_table, test3) {
+TEST(create_table, test3) {
     Parser parser;
     parser.execute("create table test (id : int32 = -200);");
 
@@ -170,35 +170,47 @@ TEST(create_index, test1) {
     EXPECT_EQ(Tests::check_index_in_table(Sql::IndexType::ORDERED, "password_hash", "TEST"), false);
     parser.execute("create ordered index on TEST by password_hash;");
     EXPECT_EQ(Tests::check_index_in_table(Sql::IndexType::ORDERED, "password_hash", "TEST"), true);
+
+    if (!std::filesystem::remove("../data/TEST")) {
+        throw "cant remove test table";
+    }
 };
 
 // ordered index
-TEST(create_index, test1) {
+TEST(create_index, test2) {
     Parser parser;
     parser.execute("create table TEST ({key, autoincrement} id : int32, {unique} login: string[32], password_hash: bytes[8], is_admin: bool = false);");
     
     EXPECT_EQ(Tests::check_index_in_table(Sql::IndexType::ORDERED, "password_hash", "TEST"), false);
     parser.execute("create ordered index on TEST by password_hash;");
     EXPECT_EQ(Tests::check_index_in_table(Sql::IndexType::ORDERED, "password_hash", "TEST"), true);
+
+    if (!std::filesystem::remove("../data/TEST")) {
+        throw "cant remove test table";
+    }
 };
 
 // unordered index
-TEST(create_index, test1) {
-    Parser parser;
-    parser.execute("create table TEST ({key, autoincrement} id : int32, {unique} login: string[32], password_hash: bytes[8], is_admin: bool = false);");
-    
-    EXPECT_EQ(Tests::check_index_in_table(Sql::IndexType::ORDERED, "password_hash", "TEST"), false);
-    parser.execute("create ordered index on TEST by password_hash;");
-    EXPECT_EQ(Tests::check_index_in_table(Sql::IndexType::ORDERED, "password_hash", "TEST"), true);
-};
-
-// 2 типа индекса для 1 столбца
 TEST(create_index, test3) {
     Parser parser;
     parser.execute("create table TEST ({key, autoincrement} id : int32, {unique} login: string[32], password_hash: bytes[8], is_admin: bool = false);");
     
+    EXPECT_EQ(Tests::check_index_in_table(Sql::IndexType::ORDERED, "password_hash", "TEST"), false);
+    parser.execute("create ordered index on TEST by password_hash;");
     EXPECT_EQ(Tests::check_index_in_table(Sql::IndexType::ORDERED, "password_hash", "TEST"), true);
-    EXPECT_EQ(Tests::check_index_in_table(Sql::IndexType::UNORDERED, "password_hash", "TEST"), true);
+
+    if (!std::filesystem::remove("../data/TEST")) {
+        throw "cant remove test table";
+    }
+};
+
+// 2 типа индекса для 1 столбца
+TEST(create_index, test4) {
+    Parser parser;
+    parser.execute("create table TEST ({key, autoincrement} id : int32, {unique} login: string[32], password_hash: bytes[8], is_admin: bool = false);");
+    
+    EXPECT_EQ(Tests::check_index_in_table(Sql::IndexType::ORDERED, "password_hash", "TEST"), false);
+    EXPECT_EQ(Tests::check_index_in_table(Sql::IndexType::UNORDERED, "password_hash", "TEST"), false);
     parser.execute("create ordered index on TEST by password_hash;");
     parser.execute("create unordered index on TEST by password_hash;");
     EXPECT_EQ(Tests::check_index_in_table(Sql::IndexType::ORDERED, "password_hash", "TEST"), true);
@@ -210,7 +222,7 @@ TEST(create_index, test3) {
 };
 
 // индекс уже есть 
-TEST(create_index, test4) {
+TEST(create_index, test5) {
     Parser parser;
     parser.execute("create table TEST ({key, autoincrement} id : int32, {unique} login: string[32], password_hash: bytes[8], is_admin: bool = false);");
     
@@ -224,7 +236,7 @@ TEST(create_index, test4) {
 };
 
 // нетипичное написание
-TEST(create_index, test5) {
+TEST(create_index, test6) {
     Parser parser;
     parser.execute("create table TEST (id : int32 = -200);");
 
@@ -238,7 +250,7 @@ TEST(create_index, test5) {
 };
 
 // лишние символы
-TEST(create_index, test6) {
+TEST(create_index, test7) {
     Parser parser;
     parser.execute("create table TEST (id : int32 = -200);");
 
@@ -250,7 +262,7 @@ TEST(create_index, test6) {
 };
 
 // несуществующий столбец
-TEST(create_index, test7) {
+TEST(create_index, test8) {
     Parser parser;
     parser.execute("create table TEST (id : int32 = -200);");
 
@@ -262,7 +274,7 @@ TEST(create_index, test7) {
 };
 
 // несуществующая таблица
-TEST(create_index, test8) {
+TEST(create_index, test9) {
     Parser parser;
     parser.execute("create table TEST (id : int32 = -200);");
 
@@ -274,7 +286,7 @@ TEST(create_index, test8) {
 };
 
 // несуществующий индекс
-TEST(create_index, test9) {
+TEST(create_index, test10) {
     Parser parser;
     parser.execute("create table TEST (id : int32 = -200);");
 

@@ -101,11 +101,12 @@ void Sql::create_index(const std::string& table_name, const std::string& column_
         table.seekg(sizeof(bool), std::ios::cur); // is_ordered
         table.seekg(sizeof(bool), std::ios::cur); // is_unordered
     }
+    table.close_exc();
 
     throw "cant find column name in table";
 }
 
-void Sql::insert(const std::string& table_name, const std::unordered_map<std::string, variants> row_values) {
+void Sql::insert(const std::string& table_name, const std::unordered_map<std::string, variants>& row_values) {
     // Проверка на наличие такой таблицы
     const std::string table_path_name = "../data/" + table_name;
     if (!std::filesystem::exists(table_path_name)) {
@@ -120,20 +121,21 @@ void Sql::insert(const std::string& table_name, const std::unordered_map<std::st
 
     // Открытие таблицы
     FileStreamWithExceptions table;
-    table.open_exc(table_path_name, std::ios_base::binary | std::ios_base::in | std::ios_base::out); 
-    table.seekp(insert_pos, std::ios::cur);// перемещаем указатель на стартовую позицию
+    table.open_exc(table_path_name, std::ios_base::binary | std::ios_base::out | std::ios_base::in | std::ios_base::app); // режим записи и добавления назад
+   
 
     for (const auto& label : table_labels[table_name]) {
         variants val = row_values.at(label.name);
-        size_t val_size = sizeof(val);
+ 
+        size_t val_size = get_variants_size(val);
         if (val_size > label.value_max_size) {
-            throw "value size overflow";
+            throw "value size overflow"; 
         }
         // Вставляем размер последующей инфомрации
         table.write_exc(reinterpret_cast<const char*>(&val_size), sizeof(val_size));
         // NULL значение (заполняем чем угодно)
         if (label.value_default_size == 0 && std::holds_alternative<std::monostate>(val)) {
-            std::string buffer(label.value_max_size, '\0');;
+            std::string buffer(label.value_max_size, '\0');
             table.write_exc(buffer.c_str(), label.value_max_size);
             if (label.is_ordered) (*table_ordered_indexes)[table_name][label.name][val].push_back(insert_pos);
             if (label.is_unordered) (*table_unordered_indexes)[table_name][label.name][val].push_back(insert_pos);
@@ -179,26 +181,83 @@ void Sql::insert(const std::string& table_name, const std::unordered_map<std::st
         }
         write_variants_value(val, label.value_max_size, &table);
     }
-    table_positions[table_name].last.value() += count_bytes_in_row(table_name);
+    table.close_exc();
+
+    if (table_positions[table_name].last == std::nullopt) {
+        table_positions[table_name].last = table_positions[table_name].start;
+    }
+    else {
+        table_positions[table_name].last.value() += count_bytes_in_row(table_name);
+    }
+}
+
+void Sql::select(const std::unordered_set<std::string>& columns, const std::string& table_name) {
+
+    // Проверка на наличие такой таблицы
+    const std::string table_path_name = "../data/" + table_name;
+    if (!std::filesystem::exists(table_path_name)) {
+        throw std::ios_base::failure("Table does not exist\n");
+    }
+
+    // Нахождение стартовой позиции
+    size_t insert_pos = table_positions[table_name].start; // начало секции с данными
+
+    // Открытие таблицы
+    FileStreamWithExceptions table;
+    table.open_exc(table_path_name, std::ios_base::binary | std::ios_base::in); 
+    table.seekg(insert_pos, std::ios::beg);// перемещаем указатель на стартовую позицию
+
+    size_t rows_in_table = count_rows_in_table(table_name);
+    const auto not_exist = columns.end();
+
+    for (size_t row = 0; row < rows_in_table; ++row) {
+        for (const auto& label : table_labels[table_name]) {
+            if (columns.find(label.name) == not_exist) {
+                table.seekg(sizeof(label.value_max_size) + label.value_max_size, std::ios::cur); // skip
+                continue;
+            }
+            
+            size_t value_size;
+            table.read_exc(reinterpret_cast<char*>(&value_size), sizeof(value_size));
+            variants var = read_variants_value(label.value_type, value_size, label.value_max_size, &table); // читаем значение переменной
+           std::cout << '\t' << convert_variants_for_output(var, label.value_type) << '\t';
+        }
+        std::cout << '\n';
+    }
+    table.close_exc();
 }
 
 void Sql::write_variants_value(const variants value, const size_t max_value_size, FileStreamWithExceptions* table) {
-    size_t value_size;
+    size_t value_size = get_variants_size(value);
+
     if (std::holds_alternative<std::string>(value)) {
-        value_size = std::get<std::string>(value).size();
         table->write_exc(std::get<std::string>(value).c_str(), value_size);
     }
     else if (std::holds_alternative<int>(value)) {
-        value_size = sizeof(int);
         table->write_exc(reinterpret_cast<const char*>(&(std::get<int>(value))), value_size);
     } 
     else if (std::holds_alternative<bool>(value)) {
-        value_size = sizeof(bool);
         table->write_exc(reinterpret_cast<const char*>(&(std::get<bool>(value))), value_size);
     }
 
-    // дополнительно отступить, незаполненное пространство
-    table->seekp(max_value_size - value_size, std::ios::cur);
+    // дополнительно добавить пустое пространство
+    std::string buffer(max_value_size - value_size, '\0');
+    table->write_exc(buffer.c_str(), max_value_size - value_size);
+}
+
+size_t Sql::get_variants_size(const variants value) {
+    size_t value_size = 0;
+
+    if (std::holds_alternative<std::string>(value)) {
+        value_size = std::get<std::string>(value).size();
+    }
+    else if (std::holds_alternative<int>(value)) {
+        value_size = sizeof(int);
+    } 
+    else if (std::holds_alternative<bool>(value)) {
+        value_size = sizeof(bool);
+    }
+    return value_size;
 }
 
 // Проверка на уникальность значения (если не подключены индексы)
@@ -220,18 +279,31 @@ bool Sql::check_unique(const variants cmp_val, const std::string& column_name, c
     }
     
     size_t bytes_in_row = count_bytes_in_row(table_name);
-    size_t rows_size = (table_positions[table_name].last.value() - table_positions[table_name].start + 1) / bytes_in_row + 1; // количетсво строк
+    size_t rows_in_table = count_rows_in_table(table_name);
     
-    for (size_t row = 0; row < rows_size; ++row) { // по всем рядам читаем значение выбранного столбца
+    for (size_t row = 0; row < rows_in_table; ++row) { // по всем рядам читаем значение выбранного столбца
         size_t value_size;
         table->read_exc(reinterpret_cast<char*>(&value_size), sizeof(value_size));
         if (read_variants_value(value_type, value_size, value_max_size, table) == cmp_val) {
             return false;
         }
-        table->seekg(-1*(value_max_size + sizeof(value_size)), std::ios::cur); // возвращаемся в начало текущего значения
+        table->seekg(-1*(value_max_size + sizeof(value_max_size)), std::ios::cur); // возвращаемся в начало текущего значения
         table->seekg(bytes_in_row, std::ios::cur); // переходим на следующее значение
     }
 
     return true;
 }
 
+std::string Sql::convert_variants_for_output(const variants value, const Sql::ValueType value_type) {
+    if (std::holds_alternative<std::string>(value)) {
+        if (value_type == Sql::ValueType::BYTES) return "0x" + std::get<std::string>(value);
+        else if (value_type == Sql::ValueType::STRING) return '"' + std::get<std::string>(value) + '"';
+    }
+    else if (std::holds_alternative<int>(value)) {
+        return std::to_string(std::get<bool>(value));
+    } 
+    else if (std::holds_alternative<bool>(value)) {
+        return std::get<bool>(value) ? "true" : "false";
+    }
+    return "NULL"; 
+}

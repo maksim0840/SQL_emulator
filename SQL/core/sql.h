@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <variant>
 #include <optional>
-
+#include <unordered_set>
 
 template <typename Key, typename Value>
 using umap = std::unordered_map<Key, Value>;
@@ -63,8 +63,9 @@ public:
 
     void create_table(const std::string& talbe_name, const std::vector<ColumnLabel>& labels);
     void create_index(const std::string& table_name, const std::string& column_name, const IndexType index_type);
-    void insert(const std::string& talbe_name, const std::unordered_map<std::string, variants> row_values);
-    
+    void insert(const std::string& talbe_name, const std::unordered_map<std::string, variants>& row_values);
+    void select(const std::unordered_set<std::string>& columns, const std::string& table_name);
+
 private:
     friend class Parser;
     friend class Tests;
@@ -88,9 +89,12 @@ private:
     void read_table_indexes(const std::string& table_name, OrderedIndex* ordered_indexes, UnorderedIndex* unordered_indexes); // обновляет индексы
 
     // Вспомогательные
-    size_t count_bytes_in_row(const std::string table_name);
+    size_t count_bytes_in_row(const std::string& table_name);
+    size_t count_rows_in_table(const std::string& table_name);
     void write_variants_value(const variants value, const size_t value_size, FileStreamWithExceptions* table);
     variants read_variants_value(const ValueType value_type, const size_t value_size, const size_t value_max_size, FileStreamWithExceptions* table); // читает из файла значение переменной std::variants
     bool check_unique(const variants cmp_val, const std::string& column_name, const std::string& table_name, FileStreamWithExceptions* table); // проверяет на уникальность значения cmp_val в столбце column_name
-    
+    size_t get_variants_size(const variants value);
+    std::vector<std::string> get_label_names(const std::string& table_name);
+    std::string convert_variants_for_output(const variants value, const Sql::ValueType value_type);
 };

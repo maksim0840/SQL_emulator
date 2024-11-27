@@ -75,17 +75,6 @@ std::string Parser::expect_extended_name(bool throw_exceptions = true) {
     }
     return name;
 }
-// std::vector<std::string> Parser::expect_names_before_keyword(const std::string& keyword) {
-//     std::vector<std::string> names_vec;
-//     while (true) {
-//         std::string name = expect_name();
-//         if (to_lower(name) == keyword) {
-//             break;
-//         }
-//         names_vec.push_back(name);
-//     }
-//     return names_vec;
-// }
 
 int Parser::expect_value(bool throw_exceptions = true) {
     skip_spaces();
@@ -504,7 +493,6 @@ std::unordered_map<std::string, variants> Parser::prepare_row_order_values(const
         throw "unequal number of row components";
     }
 
-    size_t cur_label = 0;
     for (size_t i = 0; i < labels_size; ++i) {
         // Проверка введённых значений на совпадение типов со столбцами
         if (!std::holds_alternative<std::monostate>(old_row_values[i].value_) && labels[i].value_type != old_row_values[i].type_) {
@@ -539,6 +527,38 @@ std::unordered_map<std::string, variants> Parser::prepare_row_assignment_values(
     }
     return new_row_values;
 }
+
+
+std::unordered_set<std::string>Parser::expect_columns_names() {
+    std::unordered_set<std::string> columns_names;
+    skip_spaces();
+
+    if (input[pos] == '*') {
+        ++pos;
+        columns_names.insert("*");
+        return columns_names;
+    }
+
+    while (input[pos] != ';') {
+        size_t save_pos = pos;
+        std::string column_name = expect_extended_name();
+        
+        if (column_name == "from") {
+            pos = save_pos;
+            break;
+        }
+
+        auto res = columns_names.insert(column_name);
+        if (!res.second) { // уже существует
+            throw "dublicated column names";
+        }
+
+        skip_comma();
+    }
+
+    return columns_names;
+}
+
 
 void Parser::execute(const std::string& str) {
     if (str.back() != ';') {
@@ -600,31 +620,55 @@ void Parser::execute(const std::string& str) {
                 query_row_values = prepare_row_assignment_values(row_values, db.table_labels[query_table_name]);
             }
             
-             // db.insert(query_table_name, query_row_values)
+            db.insert(query_table_name, query_row_values);
         }
-        // else if (command == "select") {
-        //     //
-        // }
+        else if (command == "select") {
+            // Без condition !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+            std::string query_table_name;
+            std::unordered_set<std::string> query_column_names;
+
+            query_column_names = expect_columns_names();
+            expect_keyword("from");
+            query_table_name = expect_extended_name(false);
+            expect_ending();
+
+            if (query_column_names.size() == 1 && query_column_names.find("*") != query_column_names.end()) {
+                std::vector<std::string> column_names_vec = db.get_label_names(query_table_name);
+                query_column_names = std::unordered_set<std::string>(column_names_vec.begin(), column_names_vec.end()); 
+            }
+
+            // for (const auto& obj : query_column_names) {
+            //     std::cout << obj << '\n';
+            // }
+            db.select(query_column_names, query_table_name);
+        }
+        else if (command == "delete") {
+            // Без condition !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+            std::string query_table_name;
+            query_table_name = expect_extended_name(false);
+            expect_ending();
+
+            // db.delete(query_table_name);
+
+        }
         // else if (command == "update") {
         //     //
         // }
-        // else if (command == "delete") {
-        //     //
-        // }
-        // else {
-        //     throw "unknownd command";
-        // }
+        else {
+            throw "unknownd command";
+        }
     }
 }
 
 
-int main() {
-    // if (!std::filesystem::remove("../data/users")) {
-    //     throw "cant remove test table";
-    // }
-	Parser parser;
-    parser.execute("create table users ({key, autoincrement} id : int32, {unique} login: string[32], password_hash: bytes[8], is_admin: bool = false);");
-	//parser.execute("insert (,  \"vasya\", 0xdeadbeefdeadbeef, false) to users;");
+// int main() {
+   
+// 	Parser parser;
+//     //parser.execute("create table users ({key, autoincrement} id : int32, {unique} login: string[32], password_hash: bytes[8], is_admin: bool = false);");
+// 	//parser.execute("insert (,  \"vasya\", 0xdeadbeef, false) to users;");
+//     parser.execute("select * from users;");
 
-    return 0;
-}
+//     return 0;
+// }

@@ -29,11 +29,15 @@ cmake --build .
 - create table
 - create index (индексы работают при проверке наличия значений в столбце при вставке insert с атрибутом unique)
 - insert
+- 
 +- Сделано (работают без condition):
+  
 - insert (в процессе создания тестов)
 - select
 - delete (работают без condition)
+- 
 Не приступал:
+
 - join
 - update
 

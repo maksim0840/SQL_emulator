@@ -1,10 +1,4 @@
-
 #include "parser.h"
-#include <vector>
-#include <string>
-#include <iostream>
-#include <cctype>
-#include <unordered_set>
 
 bool Parser::is_sep() {
     if (input[pos] == ',' || input[pos] == ' ' || input[pos] == ';' || input[pos] == '\n' || input[pos] == '\t' \
@@ -13,6 +7,7 @@ bool Parser::is_sep() {
     }
     return false;
 }
+
 void Parser::skip_spaces() {
     while(input[pos] == ' ' || input[pos] == '\n' || input[pos] == '\t') {
         ++pos;
@@ -38,7 +33,7 @@ std::string Parser::to_lower(const std::string& str) {
     return low_str;
 }
 
-std::string Parser::expect_name(bool throw_exceptions = true) {
+std::string Parser::expect_name(bool throw_exceptions) {
     skip_spaces();
     std::string name;
     while (std::isalpha(input[pos])) {
@@ -54,7 +49,7 @@ std::string Parser::expect_name(bool throw_exceptions = true) {
     return name;
 }
 
-std::string Parser::expect_extended_name(bool throw_exceptions = true) {
+std::string Parser::expect_extended_name(bool throw_exceptions) {
     skip_spaces();
     std::string name;
     size_t name_size = 0;
@@ -76,7 +71,7 @@ std::string Parser::expect_extended_name(bool throw_exceptions = true) {
     return name;
 }
 
-int Parser::expect_value(bool throw_exceptions = true) {
+int Parser::expect_value(bool throw_exceptions) {
     skip_spaces();
     std::string str_value;
     size_t str_value_size = 0;
@@ -99,7 +94,7 @@ std::string Parser::expect_command() {
     return to_lower(expect_name());
 }
 
-bool Parser::expect_keyword(const std::string& keyword, bool throw_exceptions = true) {
+bool Parser::expect_keyword(const std::string& keyword, bool throw_exceptions) {
     size_t prev_pos = pos;
     std::string str =  expect_command();
     if (keyword != str) {
@@ -159,7 +154,7 @@ std::string Parser::read_string_str(const size_t max_size) {
     return str;
 }
 
-std::string Parser::read_bytes_str(const size_t max_size, bool can_be_smaller = false) {
+std::string Parser::read_bytes_str(const size_t max_size, bool can_be_smaller) {
     skip_spaces();
     if (input[pos] != '0' || input[pos + 1] != 'x') {
         throw "uncorrect bytes format";
@@ -281,7 +276,7 @@ void Parser::expect_label_type(Sql::ColumnLabel* label) {
     }
     else if (str == "bytes") {
         label->value_type = Sql::ValueType::BYTES;
-        label->value_max_size = expect_label_size();
+        label->value_max_size = expect_label_size()*2;
     }
     else {
         throw "unexpected type";
@@ -349,28 +344,25 @@ std::vector<Sql::ColumnLabel> Parser::expect_label() {
     return labels_vec;
 }
 
-void Parser::check_for_correct_attributes(std::vector<Sql::ColumnLabel>* labels) {
+void Parser::determine_presets_by_attributes(std::vector<Sql::ColumnLabel>* labels) {
     size_t labels_size = labels->size();
 
     for (size_t i = 0; i < labels_size; ++i) {
+        // Выключаем по умолчанию индексы
+        (*labels)[i].is_ordered = false;
+        (*labels)[i].is_unordered = false;
+        // Выставляем индекс ordered и атрибут unique если есть атрибут key
         if ((*labels)[i].is_key) {
+            (*labels)[i].is_ordered = true;
             (*labels)[i].is_unique = true;
         }
+        // Атрибуты не могут содержать дефолтные значения
         if ((*labels)[i].value_default_size != 0 && ((*labels)[i].is_unique || (*labels)[i].is_autoincrement)) {
             throw "cant set default value with attributes";
         }
-    }
-}   
-
-void Parser::determine_indexes_by_attributes(std::vector<Sql::ColumnLabel>* labels) {
-    size_t labels_size = labels->size();
-
-    for (size_t i = 0; i < labels_size; ++i) {
-        (*labels)[i].is_ordered = false;
-        (*labels)[i].is_unordered = false;
-
-        if ((*labels)[i].is_key) {
-            (*labels)[i].is_ordered = true;
+        // Если есть атрибут autoincrement то значение может быть только INT32
+        if ((*labels)[i].is_autoincrement && (*labels)[i].value_type != Sql::ValueType::INT32) {
+            throw "uncorrect value_type for autoincrement attribute";
         }
     }
 }
@@ -417,7 +409,7 @@ Parser::InsertingType Parser::determine_inserting_type() {
 void Parser::expect_order_value(std::vector<Parser::InsertingValueInfo>* row_values) {
     skip_spaces();
     
-    if (input[pos] == ',' || input[pos] == '(') {
+    if (input[pos] == ',' || input[pos] == ')') {
         InsertingValueInfo value_info = {.value_=std::monostate{}, .type_=Sql::ValueType::INT32};
         row_values->push_back(value_info);
     }
@@ -467,7 +459,7 @@ Parser::InsertingType Parser::expect_row_values(std::vector<InsertingValueInfo>*
     Parser::InsertingType inserting_type = determine_inserting_type();
 
     // Добавляем значения в соотвествии с их типом
-    while (input[pos] != ';') {
+    while (input[pos] != ';' && input[pos] != ')') {
         if (inserting_type == Parser::InsertingType::BY_ORDER) {
             expect_order_value(row_values);
         }
@@ -496,7 +488,11 @@ std::unordered_map<std::string, variants> Parser::prepare_row_order_values(const
     for (size_t i = 0; i < labels_size; ++i) {
         // Проверка введённых значений на совпадение типов со столбцами
         if (!std::holds_alternative<std::monostate>(old_row_values[i].value_) && labels[i].value_type != old_row_values[i].type_) {
-            throw "uncorrect value type";
+            throw "uncorrect value type of inserting column";
+        }
+        if (labels[i].is_autoincrement) {
+            if (old_row_values[i].type_ != Sql::ValueType::INT32) throw "uncorrect value type for autoincrement column";
+            if (!std::holds_alternative<std::monostate>(old_row_values[i].value_)) throw "cant set value in autoincrement column by user";
         }
         new_row_values[labels[i].name] = old_row_values[i].value_;
     }
@@ -521,7 +517,11 @@ std::unordered_map<std::string, variants> Parser::prepare_row_assignment_values(
         }
         // Проверка введённых значений на совпадение типов со столбцами
         if (!std::holds_alternative<std::monostate>(value_info.value_) && labels_by_name[value_info.name_].value_type != value_info.type_) {
-            throw "uncorrect value type";
+            throw "uncorrect value type of inserting column";
+        }
+        if (labels_by_name[value_info.name_].is_autoincrement) {
+            if (value_info.type_ != Sql::ValueType::INT32) throw "uncorrect value type for autoincrement column";
+            if (!std::holds_alternative<std::monostate>(value_info.value_)) throw "cant set value in autoincrement column by user";
         }
         new_row_values[value_info.name_] = value_info.value_;
     }
@@ -580,8 +580,7 @@ void Parser::execute(const std::string& str) {
             query_labels = expect_label();
             expect_ending();
 
-            check_for_correct_attributes(&query_labels);
-            determine_indexes_by_attributes(&query_labels);
+            determine_presets_by_attributes(&query_labels);
             check_for_dublicated_columns(query_labels);
 
             db.create_table(query_table_name, query_labels);
@@ -624,7 +623,7 @@ void Parser::execute(const std::string& str) {
         }
         else if (command == "select") {
             // Без condition !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
+            
             std::string query_table_name;
             std::unordered_set<std::string> query_column_names;
 
@@ -632,15 +631,11 @@ void Parser::execute(const std::string& str) {
             expect_keyword("from");
             query_table_name = expect_extended_name(false);
             expect_ending();
-
-            if (query_column_names.size() == 1 && query_column_names.find("*") != query_column_names.end()) {
-                std::vector<std::string> column_names_vec = db.get_label_names(query_table_name);
-                query_column_names = std::unordered_set<std::string>(column_names_vec.begin(), column_names_vec.end()); 
+            
+            if (query_column_names.size() != 1 && query_column_names.find("*") != query_column_names.end()) {
+                throw "unexpected symbol";
             }
 
-            // for (const auto& obj : query_column_names) {
-            //     std::cout << obj << '\n';
-            // }
             db.select(query_column_names, query_table_name);
         }
         else if (command == "delete") {
@@ -650,7 +645,7 @@ void Parser::execute(const std::string& str) {
             query_table_name = expect_extended_name(false);
             expect_ending();
 
-            // db.delete(query_table_name);
+            db.delete_table(query_table_name);
 
         }
         // else if (command == "update") {
@@ -661,17 +656,3 @@ void Parser::execute(const std::string& str) {
         }
     }
 }
-
-
-<<<<<<< HEAD
-// int main() {
-   
-// 	Parser parser;
-//     //parser.execute("create table users ({key, autoincrement} id : int32, {unique} login: string[32], password_hash: bytes[8], is_admin: bool = false);");
-// 	//parser.execute("insert (,  \"vasya\", 0xdeadbeef, false) to users;");
-//     parser.execute("select * from users;");
-
-//     return 0;
-// }
-=======
->>>>>>> 5ac42c08fe539b8a04f9212e51c67746c3e08632

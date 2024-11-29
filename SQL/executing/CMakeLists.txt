@@ -2,4 +2,4 @@
 add_library(executing STATIC basic_operations.cpp)
 
 # связываем, сообщаем о зависимости executing от setup
-target_link_libraries(executing  PUBLIC setup condition)
+target_link_libraries(executing PUBLIC setup condition)

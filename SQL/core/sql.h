@@ -1,6 +1,4 @@
 #pragma once
-
-#include "fstream_with_exceptions.h"
 #include <string>
 #include <vector>
 #include <map>
@@ -8,6 +6,9 @@
 #include <variant>
 #include <optional>
 #include <unordered_set>
+
+#include "fstream_with_exceptions.h"
+#include "sql_exception.h"
 
 template <typename Key, typename Value>
 using umap = std::unordered_map<Key, Value>;
@@ -18,11 +19,11 @@ using variants = std::variant<std::monostate, int, bool, std::string>;
 using OrderedIndex = umap<std::string, umap<std::string, map<variants, std::vector<size_t>>>>;
 using UnorderedIndex = umap<std::string, umap<std::string, umap<variants, std::vector<size_t>>>>;
 
-class Parser;
-class Tests;
+class Parser; // для парсера
+class Tests; // для тестов
 
 
-class Sql { // полностью приватный (запросы через парсер)
+class Sql {
 public:
 
     // Доступные типы значений столбцов
@@ -46,7 +47,7 @@ public:
         std::string name;
         ValueType value_type;
         size_t value_max_size; // максимальный размер типа
-        size_t value_default_size; // размер deafault значения (0 => null)
+        size_t value_default_size; // фактический размер deafault значения (0 => null)
         variants value_default;
         // attributes
         bool is_unique;
@@ -65,36 +66,31 @@ public:
     void create_index(const std::string& table_name, const std::string& column_name, const IndexType index_type);
     void insert(const std::string& talbe_name, const std::unordered_map<std::string, variants>& row_values);
     void select(const std::unordered_set<std::string>& columns, const std::string& table_name);
+    void delete_table(const std::string& table_name);
 
 private:
     friend class Parser;
     friend class Tests;
+    
+    class Helper; // вложенный класс для вспомогательных функций, обеспечивающих работу основных
+    Helper* helper_; // указатель на объект класса Helper для обращения к его методам
 
     #pragma pack(push, 1) // отключить выравнивание
     struct RowsPositions {
-        size_t start; // указывает на начало секции со строками в таблице
+        size_t start; // указывает на начало секции с данными
         std::optional<size_t> last; // указывает на начало последней строки (nullopt - нет строк вообще)
     };
     #pragma pack(pop)
 
     // Информация о таблице
     std::unordered_map<std::string, std::vector<ColumnLabel>> table_labels; // храним заголовки и служебную информацию о всех столбцах из каждой таблицы
-    std::unordered_map<std::string, RowsPositions> table_positions; // храним позиции начальной и конечной строк таблицы из каждой таблицы
-    // Индексы таблиц (обращение вида) index[имя таблицы][имя столбца][значение] = вектор позиций строк с этим значением в таблице>
+    std::unordered_map<std::string, RowsPositions> table_positions; // храним позиции начальной и конечной строки таблицы
+    // Индексы таблиц: обращение имеет вид index[имя таблицы][имя столбца][значение] = вектор позиций начала строк с этим значением в таблице
     OrderedIndex* table_ordered_indexes; 
     UnorderedIndex* table_unordered_indexes;
 
-    size_t read_table_labels(const std::string& table_name, std::vector<ColumnLabel>* labels);
+    // Обновление информации о таблице (используется в основном чтобы вспомнить параметры таблиц при создании класса в конструкторе)
+    size_t read_table_labels(const std::string& table_name, std::vector<ColumnLabel>* labels); // обновляет информацию о столбцах таблицы
     void read_table_positions(const std::string& table_name, const size_t end_labels_pos, RowsPositions* positions); // обновляет инфомрацию о позициях первой и последней строки
     void read_table_indexes(const std::string& table_name, OrderedIndex* ordered_indexes, UnorderedIndex* unordered_indexes); // обновляет индексы
-
-    // Вспомогательные
-    size_t count_bytes_in_row(const std::string& table_name);
-    size_t count_rows_in_table(const std::string& table_name);
-    void write_variants_value(const variants value, const size_t value_size, FileStreamWithExceptions* table);
-    variants read_variants_value(const ValueType value_type, const size_t value_size, const size_t value_max_size, FileStreamWithExceptions* table); // читает из файла значение переменной std::variants
-    bool check_unique(const variants cmp_val, const std::string& column_name, const std::string& table_name, FileStreamWithExceptions* table); // проверяет на уникальность значения cmp_val в столбце column_name
-    size_t get_variants_size(const variants value);
-    std::vector<std::string> get_label_names(const std::string& table_name);
-    std::string convert_variants_for_output(const variants value, const Sql::ValueType value_type);
 };

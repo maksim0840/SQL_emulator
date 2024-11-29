@@ -18,6 +18,6 @@ enable_testing()
 include(GoogleTest)
 
 add_executable(test_binary test.cpp)
-target_link_libraries(test_binary GTest::gtest_main)
+target_link_libraries(test_binary parser GTest::gtest_main)
 
 gtest_discover_tests(test_binary)

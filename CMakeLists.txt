@@ -1,4 +1,13 @@
-project(SQL_project)
-add_executable(main main.cpp)
+cmake_minimum_required(VERSION 3.10)
+project(MainSql)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 add_subdirectory(SQL)
-target_link_libraries(main PRIVATE SQL)
+
+add_executable(main_app main.cpp)
+
+target_link_libraries(main_app PUBLIC parser)
+
+target_include_directories(main_app PUBLIC SQL)

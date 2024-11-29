@@ -1,8 +1,6 @@
 #pragma once
 
-#include "../core/sql.h"
-#include <unordered_map>
-#include <unordered_set>
+#include "sql.h"
 
 class Condition {
 private:

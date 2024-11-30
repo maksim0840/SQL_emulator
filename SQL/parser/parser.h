@@ -7,7 +7,7 @@ private:
 	std::string input; // переданная команда
 	size_t pos; // текущая исследуемая позиция в команде
     size_t sz; // размер команды
-    Sql db;
+    Sql* sql_;
 
     bool is_sep();
     void skip_spaces();
@@ -62,4 +62,6 @@ private:
 
 public:
 	void execute(const std::string& str);
+    Parser(const std::string& data_dir);
+    ~Parser();
 };

@@ -59,7 +59,7 @@ public:
     };
     #pragma pack(pop)
 
-    Sql();
+    Sql(const std::string& data_dir);
     ~Sql();
 
     void create_table(const std::string& talbe_name, const std::vector<ColumnLabel>& labels);
@@ -74,6 +74,7 @@ private:
     
     class Helper; // вложенный класс для вспомогательных функций, обеспечивающих работу основных
     Helper* helper_; // указатель на объект класса Helper для обращения к его методам
+    std::string data_dir_;
 
     #pragma pack(push, 1) // отключить выравнивание
     struct RowsPositions {

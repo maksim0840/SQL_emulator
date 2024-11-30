@@ -22,7 +22,7 @@ Condition::Condition(const std::vector<Sql::ColumnLabel>& table_labels, std::uno
     // Проверяет, правда ли, что все имена столбцов из manual присутсвуют в table_name таблице
     for (const auto& [key, value] : manual) {
         if (columns_names.find(key) == not_exist) {
-            throw "cant find column name in table";
+            throw SqlException("cant find column name in table");
         }
     }
     manual_ = manual;

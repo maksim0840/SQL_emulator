@@ -2,13 +2,13 @@
 #include "sql_helper.h"
 
 // Конструктор
-Sql::Sql() {
+Sql::Sql(const std::string& data_dir) {
     table_ordered_indexes = new OrderedIndex();
     table_unordered_indexes = new UnorderedIndex();
     helper_ = new Sql::Helper(this);
+    data_dir_ = data_dir;
 
-    const std::string dir_name = "../data";
-    const auto dir = std::filesystem::directory_iterator(dir_name);
+    const auto dir = std::filesystem::directory_iterator(data_dir_);
 
     // Цикл по всем файлам директории "data"
     for (const auto& entry : dir) {
@@ -31,9 +31,9 @@ Sql::~Sql() {
 size_t Sql::read_table_labels(const std::string& table_name, std::vector<ColumnLabel>* labels) {
 
     // Проверка на наличие такой таблицы
-    const std::string table_path_name = "../data/" + table_name;
+    const std::string table_path_name = data_dir_ + "/" + table_name;
     if (!std::filesystem::exists(table_path_name)) {
-        throw std::ios_base::failure("Table does not exist\n");
+        throw SqlException("Table does not exist");
     }
     
     // Открытие таблицы
@@ -73,9 +73,9 @@ size_t Sql::read_table_labels(const std::string& table_name, std::vector<ColumnL
 void Sql::read_table_positions(const std::string& table_name, const size_t end_labels_pos, RowsPositions* positions) {
 
     // Проверка на наличие такой таблицы
-    const std::string table_path_name = "../data/" + table_name;
+    const std::string table_path_name = data_dir_ + "/" + table_name;
     if (!std::filesystem::exists(table_path_name)) {
-        throw std::ios_base::failure("Table does not exist\n");
+        throw SqlException("Table does not exist");
     }
     
     // Открытие таблицы
@@ -105,9 +105,9 @@ void Sql::read_table_indexes(const std::string& table_name, OrderedIndex* ordere
     }
 
     // Проверка на наличие такой таблицы
-    const std::string table_path_name = "../data/" + table_name;
+    const std::string table_path_name = data_dir_ + "/" + table_name;
     if (!std::filesystem::exists(table_path_name)) {
-        throw std::ios_base::failure("Table does not exist\n");
+        throw SqlException("Table does not exist");
     }
     
     // Открытие таблицы

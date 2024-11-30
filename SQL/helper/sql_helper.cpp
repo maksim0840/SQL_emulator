@@ -32,7 +32,7 @@ size_t Sql::Helper::count_rows_in_table(const std::string& table_name) {
 void Sql::Helper::write_variants_value(const variants value, const size_t value_max_size, FileStreamWithExceptions* table) {
     size_t value_size = get_variants_size(value);
     if (value_size > value_max_size) {
-        throw "value size overflow";
+        throw SqlException("value size overflow");
     }
 
     if (std::holds_alternative<std::string>(value)) {
@@ -53,7 +53,7 @@ void Sql::Helper::write_variants_value(const variants value, const size_t value_
 // Прочитать переменную файла таблицы с типом variants
 variants Sql::Helper::read_variants_value(const Sql::ValueType value_type, const size_t value_size, const size_t value_max_size, FileStreamWithExceptions* table) {
     if (value_size > value_max_size) {
-        throw "value size overflow";
+        throw SqlException("value size overflow");
     }
 
     variants var;
@@ -137,9 +137,9 @@ std::vector<std::vector<variants>> Sql::Helper::get_data_rows(const std::unorder
     std::vector<std::vector<variants>> data_rows;
 
     // Проверка на наличие такой таблицы
-    const std::string table_path_name = "../data/" + table_name;
+    const std::string table_path_name = sql_->data_dir_ + "/" + table_name;
     if (!std::filesystem::exists(table_path_name)) {
-        throw std::ios_base::failure("Table does not exist\n");
+        throw SqlException("Table does not exist");
     }
     
     // Открытие таблицы
@@ -185,7 +185,7 @@ std::vector<std::pair<size_t, variants>> Sql::Helper::get_checked_values_to_inse
         // Получаем размер значения
         size_t val_size = get_variants_size(val);
         if (val_size > label.value_max_size) {
-            throw "value size overflow"; 
+            throw SqlException("value size overflow"); 
         }
 
         // Проверяем атрибут is_autoincrement
@@ -211,21 +211,21 @@ std::vector<std::pair<size_t, variants>> Sql::Helper::get_checked_values_to_inse
         // is_unique == true, значит проверяем на повторения
         if (label.is_unordered) { // есть unordered индекс
             if ((*(sql_->table_unordered_indexes))[table_name][label.name][val].size() != 0) {
-                throw "cant write not unique value";
+                throw SqlException("cant write not unique value");
             }
             checked_values.push_back({val_size, val});
             continue;
         }
         else if (label.is_ordered) { // есть ordered индекс
             if ((*(sql_->table_ordered_indexes))[table_name][label.name][val].size() != 0) {
-                throw "cant write not unique value";
+                throw SqlException("cant write not unique value");
             }
             checked_values.push_back({val_size, val});
             continue;
         }
         // нет индексов (проверять перебором все строки)
         if (!check_unique(val, label.name, table_name, table)) {
-            throw "cant write not unique value";
+            throw SqlException("cant write not unique value");
         }
         checked_values.push_back({val_size, val});
     }

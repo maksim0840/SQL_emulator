@@ -6,9 +6,9 @@
 void Sql::create_table(const std::string& table_name, const std::vector<ColumnLabel>& labels) {
 
     // Проверка на наличие такой таблицы
-    const std::string table_path_name = "../data/" + table_name;
+    const std::string table_path_name = data_dir_ + "/" + table_name;
     if (std::filesystem::exists(table_path_name)) {
-        throw std::ios_base::failure("Table alredy exists\n");
+        throw SqlException("Table alredy exists");
     }
 
     // Создание таблицы
@@ -43,9 +43,9 @@ void Sql::create_table(const std::string& table_name, const std::vector<ColumnLa
 void Sql::create_index(const std::string& table_name, const std::string& column_name, const IndexType index_type) {
     
     // Проверка на наличие такой таблицы
-    const std::string table_path_name = "../data/" + table_name;
+    const std::string table_path_name = data_dir_ + "/" + table_name;
     if (!std::filesystem::exists(table_path_name)) {
-        throw std::ios_base::failure("Table does not exist\n");
+        throw SqlException("Table does not exist");
     }
     
     // Открытие таблицы
@@ -94,15 +94,15 @@ void Sql::create_index(const std::string& table_name, const std::string& column_
     }
     table.close_exc();
 
-    throw "cant find column name in table";
+    throw SqlException("cant find column name in table");
 }
 
 void Sql::insert(const std::string& table_name, const std::unordered_map<std::string, variants>& row_values) {
     
     // Проверка на наличие такой таблицы
-    const std::string table_path_name = "../data/" + table_name;
+    const std::string table_path_name = data_dir_ + "/" + table_name;
     if (!std::filesystem::exists(table_path_name)) {
-        throw std::ios_base::failure("Table does not exist\n");
+        throw SqlException("Table does not exist");
     }
 
     // Нахождение стартовой позиции
@@ -145,9 +145,9 @@ void Sql::insert(const std::string& table_name, const std::unordered_map<std::st
 void Sql::select(const std::unordered_set<std::string>& columns, const std::string& table_name) {
 
     // Проверка на наличие такой таблицы
-    const std::string table_path_name = "../data/" + table_name;
+    const std::string table_path_name = data_dir_ + "/" + table_name;
     if (!std::filesystem::exists(table_path_name)) {
-        throw std::ios_base::failure("Table does not exist\n");
+        throw SqlException("Table does not exist\n");
     }
 
     std::vector<std::size_t> paddings; // вектор с отступами для каждого столбца
@@ -198,14 +198,14 @@ void Sql::select(const std::unordered_set<std::string>& columns, const std::stri
 
 void Sql::delete_table(const std::string& table_name) {
     // Проверка на наличие такой таблицы
-    const std::string table_path_name = "../data/" + table_name;
+    const std::string table_path_name = data_dir_ + "/" + table_name;
     if (!std::filesystem::exists(table_path_name)) {
-        throw std::ios_base::failure("Table does not exist\n");
+        throw SqlException("Table does not exist\n");
     }
 
     // Удалить файл
     if (!std::filesystem::remove(table_path_name)) {
-        throw "cant remove table";
+        throw SqlException("cant remove table");
     }
 
     // Удалить связанную с таблицей инфомрацию
